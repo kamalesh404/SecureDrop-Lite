@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SecureDrop-Lite</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0d1117; color: #e6edf3;
+            min-height: 100vh; display: flex; flex-direction: column; align-items: center;
+            padding: 2rem 1rem;
+        }
+        .container { width: 100%; max-width: 720px; }
+        h1 { font-size: 2rem; font-weight: 600; margin-bottom: 0.5rem; text-align: center; }
+        .subtitle { color: #8b949e; text-align: center; margin-bottom: 2rem; }
+        .card {
+            background: #161b22; border: 1px solid #30363d; border-radius: 12px;
+            padding: 1.5rem; margin-bottom: 1rem;
+        }
+        .card h2 { font-size: 1.1rem; font-weight: 600; margin-bottom: 1rem; color: #f0f6fc; }
+        .form-group { margin-bottom: 1rem; }
+        label { display: block; font-size: 0.875rem; color: #8b949e; margin-bottom: 0.5rem; }
+        input[type="text"], select {
+            width: 100%; padding: 0.75rem; background: #0d1117; border: 1px solid #30363d;
+            border-radius: 6px; color: #e6edf3; font-size: 1rem;
+        }
+        input[type="text"]:focus, select:focus { outline: none; border-color: #58a6ff; }
+        .btn {
+            width: 100%; padding: 0.75rem 1.5rem; border: none; border-radius: 6px;
+            font-size: 1rem; font-weight: 600; cursor: pointer; transition: opacity 0.2s;
+        }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-primary { background: #238636; color: white; }
+        .btn-primary:hover:not(:disabled) { background: #2ea043; }
+        .btn-secondary { background: #21262d; color: #e6edf3; border: 1px solid #30363d; }
+        .btn-secondary:hover:not(:disabled) { background: #30363d; }
+        .btn-danger { background: #da3633; color: white; }
+        .btn-danger:hover:not(:disabled) { background: #f85149; }
+        .status { padding: 0.75rem; border-radius: 6px; font-size: 0.875rem; margin-bottom: 1rem; }
+        .status.connected { background: #1f3b2a; border: 1px solid #2ea043; color: #7ee787; }
+        .status.connecting { background: #3b3214; border: 1px solid #d29922; color: #e3b341; }
+        .status.error { background: #491118; border: 1px solid #f85149; color: #ff7b72; }
+        .status.idle { background: #21262d; border: 1px solid #30363d; color: #8b949e; }
+        .progress-container { display: none; margin-top: 1rem; }
+        .progress-bar { height: 8px; background: #21262d; border-radius: 4px; overflow: hidden; }
+        .progress-fill { height: 100%; background: #238636; border-radius: 4px; transition: width 0.3s; width: 0%; }
+        .progress-text { display: flex; justify-content: space-between; margin-top: 0.5rem; font-size: 0.875rem; color: #8b949e; }
+        .file-info { display: none; padding: 1rem; background: #0d1117; border-radius: 6px; margin-top: 1rem; }
+        .file-info.show { display: block; }
+        .file-info h3 { font-size: 1rem; margin-bottom: 0.5rem; }
+        .file-info p { font-size: 0.875rem; color: #8b949e; margin-bottom: 0.25rem; }
+        .peer-id { font-family: monospace; background: #0d1117; padding: 0.25rem 0.5rem; border-radius: 4px; }
+        .actions { display: flex; gap: 0.75rem; margin-top: 1rem; }
+        .actions .btn { flex: 1; }
+        .qr-container { text-align: center; margin-top: 1rem; }
+        .qr-container img { max-width: 200px; border-radius: 8px; }
+        .hidden { display: none !important; }
+        @media (max-width: 480px) {
+            body { padding: 1rem; }
+            .card { padding: 1rem; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>SecureDrop-Lite</h1>
+        <p class="subtitle">E2E-encrypted browser-to-browser file sharing</p>
+
+        <div class="card" id="setup-card">
+            <h2>Connection</h2>
+            <div class="form-group">
+                <label for="room-id">Room ID</label>
+                <input type="text" id="room-id" placeholder="Enter or generate a room ID" autocomplete="off">
+            </div>
+            <div class="form-group">
+                <label for="peer-name">Your Name (optional)</label>
+                <input type="text" id="peer-name" placeholder="Anonymous" autocomplete="off">
+            </div>
+            <div class="actions">
+                <button class="btn btn-primary" id="create-room-btn">Create Room</button>
+                <button class="btn btn-secondary" id="join-room-btn">Join Room</button>
+            </div>
+        </div>
+
+        <div class="card hidden" id="transfer-card">
+            <h2>File Transfer</h2>
+            <div id="status" class="status idle">Waiting for connection...</div>
+            <div class="form-group">
+                <label for="file-input">Select File</label>
+                <input type="file" id="file-input" disabled>
+            </div>
+            <div class="progress-container" id="progress-container">
+                <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+                <div class="progress-text">
+                    <span id="progress-sent">0 B</span>
+                    <span id="progress-speed">0 B/s</span>
+                </div>
+            </div>
+            <div class="file-info" id="file-info">
+                <h3 id="file-name">-</h3>
+                <p>Size: <span id="file-size">-</span></p>
+                <p>Chunks: <span id="file-chunks">-</span> × 64 KiB</p>
+                <p>Session: <span id="session-id" class="peer-id">-</span></p>
+            </div>
+            <div class="actions">
+                <button class="btn btn-primary" id="send-btn" disabled>Send File</button>
+                <button class="btn btn-secondary" id="cancel-btn" disabled>Cancel</button>
+            </div>
+        </div>
+
+        <div class="card hidden" id="receive-card">
+            <h2>Incoming File</h2>
+            <div id="receive-status" class="status idle">Waiting for sender...</div>
+            <div class="file-info show">
+                <h3 id="receive-file-name">-</h3>
+                <p>Size: <span id="receive-file-size">-</span></p>
+                <p>Chunks: <span id="receive-file-chunks">-</span> × 64 KiB</p>
+                <p>Session: <span id="receive-session-id" class="peer-id">-</span></p>
+            </div>
+            <div class="progress-container" id="receive-progress-container">
+                <div class="progress-bar"><div class="progress-fill" id="receive-progress-fill"></div></div>
+                <div class="progress-text">
+                    <span id="receive-progress-received">0 B</span>
+                    <span id="receive-progress-speed">0 B/s</span>
+                </div>
+            </div>
+            <div class="actions">
+                <button class="btn btn-primary" id="accept-btn" disabled>Accept & Save</button>
+                <button class="btn btn-danger" id="reject-btn" disabled>Reject</button>
+            </div>
+        </div>
+
+        <div class="card hidden" id="qr-card">
+            <h2>Share Room</h2>
+            <p style="color: #8b949e; margin-bottom: 1rem;">Scan QR code or copy link to invite peer</p>
+            <div class="qr-container" id="qr-container"></div>
+            <div style="margin-top: 1rem;">
+                <input type="text" id="share-url" readonly style="width: 100%; padding: 0.75rem;">
+                <button class="btn btn-secondary" id="copy-url-btn" style="margin-top: 0.5rem;">Copy URL</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="/static/app.js"></script>
+</body>
+</html>
